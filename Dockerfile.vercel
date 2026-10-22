@@ -1,0 +1,47 @@
+
+# ============================================================
+# CartNest Spring Boot Backend — Vercel Dockerfile
+# Java 21 + Maven + Spring Boot
+# ============================================================
+
+# Stage 1: Build the Spring Boot application
+FROM maven:3.9.6-eclipse-temurin-21 AS build
+
+WORKDIR /app
+
+# Copy Maven configuration
+COPY pom.xml ./
+COPY .mvn/ .mvn/
+
+# Download dependencies
+RUN mvn dependency:go-offline -B --no-transfer-progress
+
+# Copy application source code
+COPY src/ src/
+
+# Build the executable Spring Boot JAR
+RUN mvn clean package -DskipTests -B --no-transfer-progress
+
+# Stage 2: Run the application
+FROM eclipse-temurin:21-jre-jammy AS runtime
+
+# Create a non-root user
+RUN groupadd --system cartnest && \
+    useradd --system --gid cartnest \
+    --home /app --shell /usr/sbin/nologin cartnest
+
+WORKDIR /app
+
+# Copy the executable JAR
+COPY --from=build /app/target/backend-0.0.1-SNAPSHOT.jar app.jar
+
+# Set ownership and switch to non-root user
+RUN chown cartnest:cartnest app.jar
+USER cartnest
+
+# Vercel provides the PORT environment variable
+ENV PORT=80
+EXPOSE 80
+
+# Start Spring Boot and use the supplied port
+ENTRYPOINT ["sh", "-c", "exec java -Djava.security.egd=file:/dev/./urandom -XX:MaxRAMPercentage=75.0 -Dserver.port=${PORT:-80} -jar app.jar"]
